@@ -47,6 +47,7 @@ type TracerouteOptions struct {
 	Port      int
 	MaxHops   int
 	TimeoutMs int64
+	Retries   int
 }
 
 func defaultOptions(options *TracerouteOptions) {
@@ -58,6 +59,9 @@ func defaultOptions(options *TracerouteOptions) {
 	}
 	if options.TimeoutMs == 0 {
 		options.TimeoutMs = 1000
+	}
+	if options.Retries == 0 {
+		options.Retries = 3
 	}
 }
 
@@ -71,8 +75,10 @@ func Traceroute(dest string, options *TracerouteOptions) (result string, err err
 	}
 
 	ttl := 1
+	retry := 0
 	for {
 		start := time.Now()
+
 		recvSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP)
 		if err != nil {
 			return "", err
@@ -99,12 +105,18 @@ func Traceroute(dest string, options *TracerouteOptions) (result string, err err
 			log.Println("Received n=", n, ", from=", currAddr, ", t=", elapsed)
 
 			ttl += 1
+			retry = 0
 
 			if ttl > options.MaxHops || currAddr == destAddr {
 				return "", nil
 			}
 		} else {
+			retry += 1
 			log.Print("* ")
+			if retry > options.Retries {
+				ttl += 1
+				retry = 0
+			}
 		}
 
 	}
