@@ -7,9 +7,8 @@ import (
 func TestTraceroute(t *testing.T) {
 	out, err := Traceroute("google.com", new(TracerouteOptions))
 	if err == nil {
-		expected := ""
-		if out != expected {
-			t.Errorf("TestTraceroute failed. Expected %v, got %v", expected, out)
+		if len(out.Hops) == 0 {
+			t.Errorf("TestTraceroute failed. Expected at least one hop")
 		}
 	} else {
 		t.Errorf("TestTraceroute failed due to an error: %v", err)

@@ -50,6 +50,14 @@ type TracerouteOptions struct {
 	Retries   int
 }
 
+type TracerouteHop struct {
+	Address [4]byte
+}
+
+type TracerouteResult struct {
+	Hops []TracerouteHop
+}
+
 func defaultOptions(options *TracerouteOptions) {
 	if options.Port == 0 {
 		options.Port = 33434
@@ -65,7 +73,8 @@ func defaultOptions(options *TracerouteOptions) {
 	}
 }
 
-func Traceroute(dest string, options *TracerouteOptions) (result string, err error) {
+func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResult, err error) {
+	result.Hops = []TracerouteHop{}
 	defaultOptions(options)
 	destAddr, err := destAddr(dest)
 	socketAddr, err := socketAddr()
@@ -81,12 +90,12 @@ func Traceroute(dest string, options *TracerouteOptions) (result string, err err
 
 		recvSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP)
 		if err != nil {
-			return "", err
+			return result, err
 		}
 
 		sendSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
 		if err != nil {
-			return "", err
+			return result, err
 		}
 		syscall.SetsockoptInt(sendSocket, 0x0, syscall.IP_TTL, ttl)
 		syscall.SetsockoptTimeval(recvSocket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv)
@@ -102,13 +111,14 @@ func Traceroute(dest string, options *TracerouteOptions) (result string, err err
 		elapsed := time.Since(start)
 		if err == nil {
 			currAddr := from.(*syscall.SockaddrInet4).Addr
+			result.Hops = append(result.Hops, TracerouteHop{currAddr})
 			log.Println("Received n=", n, ", from=", currAddr, ", t=", elapsed)
 
 			ttl += 1
 			retry = 0
 
 			if ttl > options.MaxHops || currAddr == destAddr {
-				return "", nil
+				return result, nil
 			}
 		} else {
 			retry += 1
