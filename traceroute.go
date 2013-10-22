@@ -78,10 +78,11 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 	defaultOptions(options)
 	destAddr, err := destAddr(dest)
 	socketAddr, err := socketAddr()
-	tv := syscall.NsecToTimeval(1000 * 1000 * options.TimeoutMs)
 	if err != nil {
 		return
 	}
+
+        tv := syscall.NsecToTimeval(1000 * 1000 * options.TimeoutMs)
 
 	ttl := 1
 	retry := 0
