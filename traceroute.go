@@ -42,10 +42,11 @@ func destAddr(dest string) (destAddr [4]byte, err error) {
 }
 
 type TracerouteOptions struct {
-	Port      int
-	MaxHops   int
-	TimeoutMs int64
-	Retries   int
+	Port       int
+	MaxHops    int
+	TimeoutMs  int64
+	Retries    int
+	PacketSize int
 }
 
 type TracerouteHop struct {
@@ -71,12 +72,16 @@ func defaultOptions(options *TracerouteOptions) {
 	if options.Retries == 0 {
 		options.Retries = 3
 	}
+	if options.PacketSize == 0 {
+		options.PacketSize = 52
+	}
 }
 
 func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResult, err error) {
 	result.Hops = []TracerouteHop{}
 	defaultOptions(options)
 	destAddr, err := destAddr(dest)
+	result.DestinationAddress = destAddr
 	socketAddr, err := socketAddr()
 	if err != nil {
 		return
@@ -107,7 +112,7 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 		syscall.Bind(recvSocket, &syscall.SockaddrInet4{Port: options.Port, Addr: socketAddr})
 		syscall.Sendto(sendSocket, []byte{0x0}, 0, &syscall.SockaddrInet4{Port: options.Port, Addr: destAddr})
 
-		var p = make([]byte, 512)
+		var p = make([]byte, options.PacketSize)
 		n, from, err := syscall.Recvfrom(recvSocket, p, 0)
 		elapsed := time.Since(start)
 		if err == nil {
