@@ -55,7 +55,8 @@ type TracerouteHop struct {
 }
 
 type TracerouteResult struct {
-	Hops []TracerouteHop
+	DestinationAddress [4]byte
+	Hops               []TracerouteHop
 }
 
 func defaultOptions(options *TracerouteOptions) {
