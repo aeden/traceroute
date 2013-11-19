@@ -17,7 +17,6 @@ func socketAddr() (addr [4]byte, err error) {
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if len(ipnet.IP.To4()) == net.IPv4len {
-				log.Println("Found IP address: ", ipnet.IP.String())
 				copy(addr[:], ipnet.IP.To4())
 				return
 			}
@@ -33,7 +32,6 @@ func destAddr(dest string) (destAddr [4]byte, err error) {
 		return
 	}
 	addr := addrs[0]
-	log.Println("Destination address: ", addr)
 
 	ipAddr, err := net.ResolveIPAddr("ip", addr)
 	if err != nil {
@@ -51,7 +49,9 @@ type TracerouteOptions struct {
 }
 
 type TracerouteHop struct {
-	Address [4]byte
+	Address     [4]byte
+	N           int
+	ElapsedTime time.Duration
 }
 
 type TracerouteResult struct {
@@ -82,7 +82,7 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 		return
 	}
 
-        tv := syscall.NsecToTimeval(1000 * 1000 * options.TimeoutMs)
+	tv := syscall.NsecToTimeval(1000 * 1000 * options.TimeoutMs)
 
 	ttl := 1
 	retry := 0
@@ -112,8 +112,8 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 		elapsed := time.Since(start)
 		if err == nil {
 			currAddr := from.(*syscall.SockaddrInet4).Addr
-			result.Hops = append(result.Hops, TracerouteHop{currAddr})
-			log.Println("Received n=", n, ", from=", currAddr, ", t=", elapsed)
+			result.Hops = append(result.Hops, TracerouteHop{Address: currAddr, N: n, ElapsedTime: elapsed})
+			//log.Println("Received n=", n, ", from=", currAddr, ", t=", elapsed)
 
 			ttl += 1
 			retry = 0

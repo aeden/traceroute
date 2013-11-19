@@ -1,6 +1,7 @@
 package traceroute
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -12,6 +13,11 @@ func TestTraceroute(t *testing.T) {
 		}
 	} else {
 		t.Errorf("TestTraceroute failed due to an error: %v", err)
+	}
+
+	for i, hop := range out.Hops {
+		addr := fmt.Sprintf("%v.%v.%v.%v", hop.Address[0], hop.Address[1], hop.Address[2], hop.Address[3])
+		fmt.Printf("%-3d %v (%v)  %v\n", i, addr, addr, hop.ElapsedTime)
 	}
 
 }
