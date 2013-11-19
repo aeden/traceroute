@@ -1,3 +1,5 @@
+// Package traceroute provides functions for executing a tracroute to a remote
+// host.
 package traceroute
 
 import (
@@ -7,6 +9,8 @@ import (
 	"time"
 )
 
+// Return the first non-loopback address as a 4 byte IP address. This address
+// is used for sending packets out.
 func socketAddr() (addr [4]byte, err error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -25,6 +29,7 @@ func socketAddr() (addr [4]byte, err error) {
 	return
 }
 
+// Given a host name convert it to a 4 byte IP address.
 func destAddr(dest string) (destAddr [4]byte, err error) {
 	addrs, err := net.LookupHost(dest)
 	if err != nil {
@@ -77,6 +82,13 @@ func defaultOptions(options *TracerouteOptions) {
 	}
 }
 
+// Traceroute uses the given dest (hostname) and options to execute a traceroute
+// from your machine to the remote host.
+//
+// Outbound packets are UDP packets and inbound packets are ICMP.
+//
+// Returns a TracerouteResult which contains an array of hops. Each hop includes
+// the elapsed time and its IP address.
 func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResult, err error) {
 	result.Hops = []TracerouteHop{}
 	defaultOptions(options)
@@ -94,22 +106,29 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 	for {
 		start := time.Now()
 
+                // Set up the socket to receive inbound packets
 		recvSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP)
 		if err != nil {
 			return result, err
 		}
 
+                // Set up the socket to send packets out.
 		sendSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
 		if err != nil {
 			return result, err
 		}
+                // This sets the current hop TTL
 		syscall.SetsockoptInt(sendSocket, 0x0, syscall.IP_TTL, ttl)
+                // This sets the timeout to wait for a response from the remote host
 		syscall.SetsockoptTimeval(recvSocket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv)
 
 		defer syscall.Close(recvSocket)
 		defer syscall.Close(sendSocket)
 
+                // Bind to the local socket to listen for ICMP packets
 		syscall.Bind(recvSocket, &syscall.SockaddrInet4{Port: options.Port, Addr: socketAddr})
+
+                // Send a single null byte UDP packet
 		syscall.Sendto(sendSocket, []byte{0x0}, 0, &syscall.SockaddrInet4{Port: options.Port, Addr: destAddr})
 
 		var p = make([]byte, options.PacketSize)
@@ -128,7 +147,6 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 			}
 		} else {
 			retry += 1
-			//log.Print("* ")
 			if retry > options.Retries {
 				ttl += 1
 				retry = 0
