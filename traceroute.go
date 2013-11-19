@@ -63,7 +63,7 @@ func defaultOptions(options *TracerouteOptions) {
 		options.Port = 33434
 	}
 	if options.MaxHops == 0 {
-		options.MaxHops = 30
+		options.MaxHops = 64
 	}
 	if options.TimeoutMs == 0 {
 		options.TimeoutMs = 1000
