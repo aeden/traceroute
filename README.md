@@ -8,7 +8,7 @@ Must be run as sudo on OS X (and others)?
 
 ```sh
 go build cmd/gotraceroute
-sudo gotraceroute example.com
+sudo ./gotraceroute example.com
 ```
 
 ## Library
