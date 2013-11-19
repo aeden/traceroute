@@ -2,7 +2,6 @@ package traceroute
 
 import (
 	"errors"
-	"log"
 	"net"
 	"syscall"
 	"time"
@@ -128,7 +127,7 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 			}
 		} else {
 			retry += 1
-			log.Print("* ")
+			//log.Print("* ")
 			if retry > options.Retries {
 				ttl += 1
 				retry = 0
