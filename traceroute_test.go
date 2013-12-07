@@ -17,7 +17,11 @@ func TestTraceroute(t *testing.T) {
 
 	for i, hop := range out.Hops {
 		addr := fmt.Sprintf("%v.%v.%v.%v", hop.Address[0], hop.Address[1], hop.Address[2], hop.Address[3])
-		fmt.Printf("%-3d %v (%v)  %v\n", i, addr, addr, hop.ElapsedTime)
+		hostOrAddr := addr
+		if hop.Host != "" {
+			hostOrAddr = hop.Host
+		}
+		fmt.Printf("%-3d %v (%v)  %v\n", i, hostOrAddr, addr, hop.ElapsedTime)
 	}
 
 }

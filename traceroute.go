@@ -4,6 +4,7 @@ package traceroute
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"syscall"
 	"time"
@@ -55,8 +56,13 @@ type TracerouteOptions struct {
 
 type TracerouteHop struct {
 	Address     [4]byte
+	Host        string
 	N           int
 	ElapsedTime time.Duration
+}
+
+func (hop *TracerouteHop) AddressString() string {
+	return fmt.Sprintf("%v.%v.%v.%v", hop.Address[0], hop.Address[1], hop.Address[2], hop.Address[3])
 }
 
 type TracerouteResult struct {
@@ -106,29 +112,29 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 	for {
 		start := time.Now()
 
-                // Set up the socket to receive inbound packets
+		// Set up the socket to receive inbound packets
 		recvSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP)
 		if err != nil {
 			return result, err
 		}
 
-                // Set up the socket to send packets out.
+		// Set up the socket to send packets out.
 		sendSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
 		if err != nil {
 			return result, err
 		}
-                // This sets the current hop TTL
+		// This sets the current hop TTL
 		syscall.SetsockoptInt(sendSocket, 0x0, syscall.IP_TTL, ttl)
-                // This sets the timeout to wait for a response from the remote host
+		// This sets the timeout to wait for a response from the remote host
 		syscall.SetsockoptTimeval(recvSocket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv)
 
 		defer syscall.Close(recvSocket)
 		defer syscall.Close(sendSocket)
 
-                // Bind to the local socket to listen for ICMP packets
+		// Bind to the local socket to listen for ICMP packets
 		syscall.Bind(recvSocket, &syscall.SockaddrInet4{Port: options.Port, Addr: socketAddr})
 
-                // Send a single null byte UDP packet
+		// Send a single null byte UDP packet
 		syscall.Sendto(sendSocket, []byte{0x0}, 0, &syscall.SockaddrInet4{Port: options.Port, Addr: destAddr})
 
 		var p = make([]byte, options.PacketSize)
@@ -136,7 +142,14 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 		elapsed := time.Since(start)
 		if err == nil {
 			currAddr := from.(*syscall.SockaddrInet4).Addr
-			result.Hops = append(result.Hops, TracerouteHop{Address: currAddr, N: n, ElapsedTime: elapsed})
+			hop := TracerouteHop{Address: currAddr, N: n, ElapsedTime: elapsed}
+
+			currHost, err := net.LookupAddr(hop.AddressString())
+			if err == nil {
+				hop.Host = currHost[0]
+			}
+
+			result.Hops = append(result.Hops, hop)
 			//log.Println("Received n=", n, ", from=", currAddr, ", t=", elapsed)
 
 			ttl += 1
