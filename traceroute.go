@@ -59,6 +59,7 @@ type TracerouteHop struct {
 	Host        string
 	N           int
 	ElapsedTime time.Duration
+	TTL         int
 }
 
 func (hop *TracerouteHop) AddressString() string {
@@ -95,7 +96,7 @@ func defaultOptions(options *TracerouteOptions) {
 //
 // Returns a TracerouteResult which contains an array of hops. Each hop includes
 // the elapsed time and its IP address.
-func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResult, err error) {
+func Traceroute(dest string, options *TracerouteOptions, c ...chan TracerouteHop) (result TracerouteResult, err error) {
 	result.Hops = []TracerouteHop{}
 	defaultOptions(options)
 	destAddr, err := destAddr(dest)
@@ -142,20 +143,26 @@ func Traceroute(dest string, options *TracerouteOptions) (result TracerouteResul
 		elapsed := time.Since(start)
 		if err == nil {
 			currAddr := from.(*syscall.SockaddrInet4).Addr
-			hop := TracerouteHop{Address: currAddr, N: n, ElapsedTime: elapsed}
+			hop := TracerouteHop{Address: currAddr, N: n, ElapsedTime: elapsed, TTL: ttl}
 
 			currHost, err := net.LookupAddr(hop.AddressString())
 			if err == nil {
 				hop.Host = currHost[0]
 			}
 
+			for _, cn := range c {
+				cn <- hop
+			}
+
 			result.Hops = append(result.Hops, hop)
-			//log.Println("Received n=", n, ", from=", currAddr, ", t=", elapsed)
 
 			ttl += 1
 			retry = 0
 
 			if ttl > options.MaxHops || currAddr == destAddr {
+				for _, cn := range c {
+					close(cn)
+				}
 				return result, nil
 			}
 		} else {
