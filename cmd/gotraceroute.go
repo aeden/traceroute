@@ -13,11 +13,11 @@ func printHop(hop traceroute.TracerouteHop) {
 	if hop.Host != "" {
 		hostOrAddr = hop.Host
 	}
-        if hop.Success {
-          fmt.Printf("%-3d %v (%v)  %v\n", hop.TTL, hostOrAddr, addr, hop.ElapsedTime)
-        } else {
-          fmt.Printf("%-3d *\n", hop.TTL)
-        }
+	if hop.Success {
+		fmt.Printf("%-3d %v (%v)  %v\n", hop.TTL, hostOrAddr, addr, hop.ElapsedTime)
+	} else {
+		fmt.Printf("%-3d *\n", hop.TTL)
+	}
 }
 
 func address(address [4]byte) string {
@@ -25,10 +25,14 @@ func address(address [4]byte) string {
 }
 
 func main() {
+	var m = flag.Int("m", traceroute.DEFAULT_MAX_HOPS, `Set the max time-to-live (max number of hops) used in outgoing probe packets (default is 64)`)
+	var q = flag.Int("q", 1, `Set the number of probes per "ttl" to nqueries (default is one probe).`)
+
 	flag.Parse()
 	host := flag.Arg(0)
-        options := traceroute.TracerouteOptions{}
-        options.SetOpt("retries", 0)
+	options := traceroute.TracerouteOptions{}
+	options.SetRetries(*q - 1)
+	options.SetMaxHops(*m + 1)
 
 	ipAddr, err := net.ResolveIPAddr("ip", host)
 	if err != nil {

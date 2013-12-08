@@ -61,35 +61,15 @@ type TracerouteOptions struct {
 	packetSize int
 }
 
-// Construct a new TracerouteOptions instance
-func NewTracerouteOptions(port, maxHops, timeoutMs, retries, packetSize int) *TracerouteOptions {
-	return &TracerouteOptions{port, maxHops, timeoutMs, retries, packetSize}
-}
-
-func (options *TracerouteOptions) SetOpt(name string, value int) {
-	switch name {
-	case "port":
-		options.port = value
-		break
-	case "maxHops":
-		options.maxHops = value
-		break
-	case "timeourMs":
-		options.timeoutMs = value
-		break
-	case "packetSize":
-		options.packetSize = value
-		break
-	default:
-		break
-	}
-}
-
 func (options *TracerouteOptions) Port() int {
 	if options.port == 0 {
 		options.port = DEFAULT_PORT
 	}
 	return options.port
+}
+
+func (options *TracerouteOptions) SetPort(port int) {
+	options.port = port
 }
 
 func (options *TracerouteOptions) MaxHops() int {
@@ -99,11 +79,19 @@ func (options *TracerouteOptions) MaxHops() int {
 	return options.maxHops
 }
 
+func (options *TracerouteOptions) SetMaxHops(maxHops int) {
+	options.maxHops = maxHops
+}
+
 func (options *TracerouteOptions) TimeoutMs() int {
 	if options.timeoutMs == 0 {
 		options.timeoutMs = DEFAULT_TIMEOUT_MS
 	}
 	return options.timeoutMs
+}
+
+func (options *TracerouteOptions) SetTimeoutMs(timeoutMs int) {
+	options.timeoutMs = timeoutMs
 }
 
 func (options *TracerouteOptions) Retries() int {
@@ -113,11 +101,19 @@ func (options *TracerouteOptions) Retries() int {
 	return options.retries
 }
 
+func (options *TracerouteOptions) SetRetries(retries int) {
+	options.retries = retries
+}
+
 func (options *TracerouteOptions) PacketSize() int {
 	if options.packetSize == 0 {
 		options.packetSize = DEFAULT_PACKET_SIZE
 	}
 	return options.packetSize
+}
+
+func (options *TracerouteOptions) SetPacketSize(packetSize int) {
+	options.packetSize = packetSize
 }
 
 // TracerouteHop type
@@ -135,8 +131,7 @@ func (hop *TracerouteHop) AddressString() string {
 }
 
 func (hop *TracerouteHop) HostOrAddressString() string {
-	addr := hop.AddressString()
-	hostOrAddr := addr
+	hostOrAddr := hop.AddressString()
 	if hop.Host != "" {
 		hostOrAddr = hop.Host
 	}
@@ -147,6 +142,18 @@ func (hop *TracerouteHop) HostOrAddressString() string {
 type TracerouteResult struct {
 	DestinationAddress [4]byte
 	Hops               []TracerouteHop
+}
+
+func notify(hop TracerouteHop, channels []chan TracerouteHop) {
+	for _, c := range channels {
+		c <- hop
+	}
+}
+
+func closeNotify(channels []chan TracerouteHop) {
+	for _, c := range channels {
+		close(c)
+	}
 }
 
 // Traceroute uses the given dest (hostname) and options to execute a traceroute
@@ -207,14 +214,14 @@ func Traceroute(dest string, options *TracerouteOptions, c ...chan TracerouteHop
 
 			hop := TracerouteHop{Success: true, Address: currAddr, N: n, ElapsedTime: elapsed, TTL: ttl}
 
+			// TODO: this reverse lookup appears to have some standard timeout that is relatively
+			// high. Consider switching to something where there is greater control.
 			currHost, err := net.LookupAddr(hop.AddressString())
 			if err == nil {
 				hop.Host = currHost[0]
 			}
 
-			for _, cn := range c {
-				cn <- hop
-			}
+			notify(hop, c)
 
 			result.Hops = append(result.Hops, hop)
 
@@ -222,17 +229,13 @@ func Traceroute(dest string, options *TracerouteOptions, c ...chan TracerouteHop
 			retry = 0
 
 			if ttl > options.MaxHops() || currAddr == destAddr {
-				for _, cn := range c {
-					close(cn)
-				}
+				closeNotify(c)
 				return result, nil
 			}
 		} else {
 			retry += 1
 			if retry > options.Retries() {
-				for _, cn := range c {
-					cn <- TracerouteHop{Success: false, TTL: ttl}
-				}
+				notify(TracerouteHop{Success: false, TTL: ttl}, c)
 				ttl += 1
 				retry = 0
 			}
