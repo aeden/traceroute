@@ -239,6 +239,11 @@ func Traceroute(dest string, options *TracerouteOptions, c ...chan TracerouteHop
 				ttl += 1
 				retry = 0
 			}
+
+			if ttl > options.MaxHops() {
+				closeNotify(c)
+				return result, nil
+			}
 		}
 
 	}
