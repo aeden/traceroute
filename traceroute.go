@@ -12,6 +12,7 @@ import (
 
 const DEFAULT_PORT = 33434
 const DEFAULT_MAX_HOPS = 64
+const DEFAULT_FIRST_HOP = 1
 const DEFAULT_TIMEOUT_MS = 500
 const DEFAULT_RETRIES = 3
 const DEFAULT_PACKET_SIZE = 52
@@ -56,6 +57,7 @@ func destAddr(dest string) (destAddr [4]byte, err error) {
 type TracerouteOptions struct {
 	port       int
 	maxHops    int
+	firstHop   int
 	timeoutMs  int
 	retries    int
 	packetSize int
@@ -81,6 +83,17 @@ func (options *TracerouteOptions) MaxHops() int {
 
 func (options *TracerouteOptions) SetMaxHops(maxHops int) {
 	options.maxHops = maxHops
+}
+
+func (options *TracerouteOptions) FirstHop() int {
+	if options.firstHop == 0 {
+		options.firstHop = DEFAULT_FIRST_HOP
+	}
+	return options.firstHop
+}
+
+func (options *TracerouteOptions) SetFirstHop(firstHop int) {
+	options.firstHop = firstHop
 }
 
 func (options *TracerouteOptions) TimeoutMs() int {
@@ -175,7 +188,7 @@ func Traceroute(dest string, options *TracerouteOptions, c ...chan TracerouteHop
 	timeoutMs := (int64)(options.TimeoutMs())
 	tv := syscall.NsecToTimeval(1000 * 1000 * timeoutMs)
 
-	ttl := 1
+	ttl := options.FirstHop()
 	retry := 0
 	for {
 		//log.Println("TTL: ", ttl)
