@@ -181,6 +181,10 @@ func closeNotify(channels []chan TracerouteHop) {
 func Traceroute(dest string, options *TracerouteOptions, c ...chan TracerouteHop) (result TracerouteResult, err error) {
 	result.Hops = []TracerouteHop{}
 	destAddr, err := destAddr(dest)
+	if err != nil {
+		return
+	}
+
 	result.DestinationAddress = destAddr
 	// socketAddr, err := socketAddr()
 	// if err != nil {
