@@ -6,12 +6,12 @@ import (
 )
 
 func printHop(hop TracerouteHop) {
-	fmt.Printf("%-3d %v (%v)  %v\n", hop.TTL, hop.HostOrAddressString(), hop.AddressString(), hop.ElapsedTime)
+	fmt.Printf("%-3d %v %v\n", hop.TTL, hop.HostOrAddressString(), hop.ElapsedTime)
 }
 
 func TestTraceroute(t *testing.T) {
-	fmt.Println("Testing synchronous traceroute\n")
-	out, err := Traceroute("google.com", new(TracerouteOptions))
+	fmt.Println("Testing synchronous traceroute")
+	out, err := Traceroute("www.qq.com", new(TracerouteOptions))
 	if err == nil {
 		if len(out.Hops) == 0 {
 			t.Errorf("TestTraceroute failed. Expected at least one hop")
@@ -27,7 +27,7 @@ func TestTraceroute(t *testing.T) {
 }
 
 func TestTraceouteChannel(t *testing.T) {
-	fmt.Println("Testing asynchronous traceroute\n")
+	fmt.Println("Testing asynchronous traceroute")
 	c := make(chan TracerouteHop, 0)
 	go func() {
 		for {
