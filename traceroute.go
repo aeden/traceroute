@@ -8,6 +8,9 @@ import (
 	"net"
 	"syscall"
 	"time"
+
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 )
 
 const DEFAULT_PORT = 33434
@@ -15,7 +18,7 @@ const DEFAULT_MAX_HOPS = 64
 const DEFAULT_FIRST_HOP = 1
 const DEFAULT_TIMEOUT_MS = 500
 const DEFAULT_RETRIES = 3
-const DEFAULT_PACKET_SIZE = 52
+const DEFAULT_PACKET_SIZE = 1500
 
 // Return the first non-loopback address as a 4 byte IP address. This address
 // is used for sending packets out.
@@ -131,11 +134,10 @@ func (options *TracerouteOptions) SetPacketSize(packetSize int) {
 
 // TracerouteHop type
 type TracerouteHop struct {
-	Success     bool
 	Address     [4]byte
 	Host        string
 	N           int
-	ElapsedTime time.Duration
+	ElapsedTime []time.Duration
 	TTL         int
 }
 
@@ -179,85 +181,76 @@ func closeNotify(channels []chan TracerouteHop) {
 func Traceroute(dest string, options *TracerouteOptions, c ...chan TracerouteHop) (result TracerouteResult, err error) {
 	result.Hops = []TracerouteHop{}
 	destAddr, err := destAddr(dest)
-	result.DestinationAddress = destAddr
-	socketAddr, err := socketAddr()
 	if err != nil {
 		return
 	}
 
+	result.DestinationAddress = destAddr
+	// socketAddr, err := socketAddr()
+	// if err != nil {
+	// 	return
+	// }
+
 	timeoutMs := (int64)(options.TimeoutMs())
 	tv := syscall.NsecToTimeval(1000 * 1000 * timeoutMs)
 
-	ttl := options.FirstHop()
-	retry := 0
-	for {
-		//log.Println("TTL: ", ttl)
-		start := time.Now()
+	// Set up the socket to send packets out.
+	sendSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_ICMP)
+	if err != nil {
+		return result, err
+	}
+	defer syscall.Close(sendSocket)
 
-		// Set up the socket to receive inbound packets
-		recvSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP)
-		if err != nil {
-			return result, err
-		}
+	// This sets the timeout to wait for a response from the remote host
+	syscall.SetsockoptTimeval(sendSocket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv)
 
-		// Set up the socket to send packets out.
-		sendSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
-		if err != nil {
-			return result, err
-		}
+	finished := false
+	for ttl := options.FirstHop(); ttl < options.MaxHops() && !finished; ttl++ {
 		// This sets the current hop TTL
-		syscall.SetsockoptInt(sendSocket, 0x0, syscall.IP_TTL, ttl)
-		// This sets the timeout to wait for a response from the remote host
-		syscall.SetsockoptTimeval(recvSocket, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv)
+		syscall.SetsockoptInt(sendSocket, syscall.IPPROTO_IP, syscall.IP_TTL, ttl)
 
-		defer syscall.Close(recvSocket)
-		defer syscall.Close(sendSocket)
+		wm := icmp.Message{
+			Type: ipv4.ICMPTypeEcho, Code: 0, Body: &icmp.Echo{ID: ttl & 0xffff, Data: []byte("R-U-OK?")},
+		}
+		wm.Body.(*icmp.Echo).Seq = ttl
+		wb, err := wm.Marshal(nil)
+		if err != nil {
+			return result, err
+		}
 
-		// Bind to the local socket to listen for ICMP packets
-		syscall.Bind(recvSocket, &syscall.SockaddrInet4{Port: options.Port(), Addr: socketAddr})
+		var hop TracerouteHop
+		hop.ElapsedTime = make([]time.Duration, options.Retries())
 
-		// Send a single null byte UDP packet
-		syscall.Sendto(sendSocket, []byte{0x0}, 0, &syscall.SockaddrInet4{Port: options.Port(), Addr: destAddr})
+		for i := 0; i < options.Retries(); i++ {
+			start := time.Now()
 
-		var p = make([]byte, options.PacketSize())
-		n, from, err := syscall.Recvfrom(recvSocket, p, 0)
-		elapsed := time.Since(start)
-		if err == nil {
-			currAddr := from.(*syscall.SockaddrInet4).Addr
+			syscall.Sendto(sendSocket, wb, 0, &syscall.SockaddrInet4{Port: options.Port(), Addr: destAddr})
 
-			hop := TracerouteHop{Success: true, Address: currAddr, N: n, ElapsedTime: elapsed, TTL: ttl}
+			var p = make([]byte, options.PacketSize())
+			_, from, err := syscall.Recvfrom(sendSocket, p, 0)
+			elapsed := time.Since(start)
 
-			// TODO: this reverse lookup appears to have some standard timeout that is relatively
-			// high. Consider switching to something where there is greater control.
-			currHost, err := net.LookupAddr(hop.AddressString())
+			hop.TTL = ttl
+			hop.N = i
+
 			if err == nil {
-				hop.Host = currHost[0]
-			}
+				currAddr := from.(*syscall.SockaddrInet4).Addr
 
-			notify(hop, c)
+				hop.ElapsedTime[i] = elapsed
+				hop.Address = currAddr
 
-			result.Hops = append(result.Hops, hop)
+				notify(hop, c)
 
-			ttl += 1
-			retry = 0
-
-			if ttl > options.MaxHops() || currAddr == destAddr {
-				closeNotify(c)
-				return result, nil
-			}
-		} else {
-			retry += 1
-			if retry > options.Retries() {
-				notify(TracerouteHop{Success: false, TTL: ttl}, c)
-				ttl += 1
-				retry = 0
-			}
-
-			if ttl > options.MaxHops() {
-				closeNotify(c)
-				return result, nil
+				if currAddr == destAddr {
+					finished = true
+				}
+			} else {
+				notify(hop, c)
 			}
 		}
+		result.Hops = append(result.Hops, hop)
 
 	}
+	closeNotify(c)
+	return result, nil
 }

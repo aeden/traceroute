@@ -2,7 +2,7 @@
 
 A traceroute library written in Go.
 
-Must be run as sudo on OS X (and others)?
+~~Must be run as sudo on OS X (and others)?~~
 
 ## CLI App
 
